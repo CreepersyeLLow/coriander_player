@@ -1,0 +1,58 @@
+name: Build macOS ARM64
+
+on:
+  workflow_dispatch: # 支持手动触发，方便测试
+  push:
+    tags:
+      - 'v*' # 推送版本标签时自动触发
+
+jobs:
+  build-macos:
+    # 使用 Apple Silicon (arm64) 的 runner，确保编译出原生 ARM64 程序
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 1. 配置 Flutter 环境（指定你项目所需的版本）
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.x' # 建议与 pubspec.yaml 或开发环境保持一致
+          channel: 'stable'
+          cache: true
+
+      # 2. 配置 Rust 工具链
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin # 明确指定 macOS ARM64 目标
+
+      # 3. 安装 Flutter Rust Bridge 代码生成工具（关键步骤）
+      - name: Install Flutter Rust Bridge Codegen
+        run: cargo install flutter_rust_bridge_codegen
+
+      # 4. 安装项目依赖
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      # 5. 生成 Rust-Dart 桥接代码（如果仓库中已包含生成文件，此步可能非必需，但建议执行确保同步）
+      - name: Generate Bridge Code
+        run: flutter_rust_bridge_codegen generate
+
+      # 6. 执行 macOS Release 构建
+      #    注意：--analyze-size 会生成体积分析报告，便于后续优化
+      - name: Build macOS App
+        run: |
+          flutter build macos --release --analyze-size
+          # 如果不需要分析体积，可简化为：
+          # flutter build macos --release
+
+      # 7. 上传构建产物（.app 文件或压缩包）
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CorianderPlayer-macOS-ARM64
+          # 构建产物通常位于 build/macos/Build/Products/Release/ 目录下
+          path: build/macos/Build/Products/Release/*.app
